@@ -1,101 +1,102 @@
+"use client";
 import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import StatusBar from "@/components/StatusBar";
+
+const NUM_DAYS = 90;
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [isFetching, setIsFetching] = useState(true);
+  const [statusHistory, setStatusHistory] = useState<
+    { status: string; duration?: number; date: string }[]
+  >(
+    Array(NUM_DAYS).fill({
+      status: "not monitored",
+      date: new Date().toISOString(),
+    })
+  );
+  console.log("Status History:", statusHistory);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+  const [intervalTime, setIntervalTime] = useState(10000); // 10 seconds
+  const [status, setStatus] = useState<string | null>(null);
+  const fetchStatus = async () => {
+    if (!isFetching) return;
+
+    try {
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      const newStatus = data.status || "down";
+      const newEntry = { status: newStatus, date: new Date().toISOString() };
+
+      setStatusHistory((prev) => {
+        let lastStatus = prev[prev.length - 1];
+        let duration = undefined;
+
+        if (lastStatus.status === "down" && newStatus === "operational") {
+          const downTimeMinutes = Math.round(
+            (new Date(newEntry.date).getTime() -
+              new Date(lastStatus.date).getTime()) /
+              60000
+          );
+          duration = downTimeMinutes;
+        }
+
+        return [...prev.slice(1), { ...newEntry, duration }];
+      });
+    } catch (error) {
+      console.error("Error fetching status:", error);
+      setStatus("down");
+      setStatusHistory((prev) => [
+        ...prev.slice(1),
+        { status: "down", date: new Date().toISOString() },
+      ]);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, intervalTime);
+    return () => clearInterval(interval);
+  }, [intervalTime, isFetching]);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center bg-[#fafafa] p-24">
+      <div className="flex flex-col items-center justify-center max-w-[850px] w-[90%]">
+        <div className="flex flex-row justify-between w-full items-center mb-6">
+          <Link href="https://e2b.dev/">
             <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+              src="/logo-gradient.svg"
+              alt="E2B Logo"
+              width={120}
+              height={36}
+              priority
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </Link>
+          <Button onClick={() => setIsFetching(!isFetching)}>
+            {isFetching ? "pause updates" : "resume"}
+          </Button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+        <div className="w-full">
+          <h2 className="text-md mono">[ All systems operational ]</h2>
+        </div>
+
+        <div className="flex flex-col w-full mt-6 border border-[#d6d6d6]">
+          <StatusBar statusHistory={statusHistory} numDays={NUM_DAYS} />
+          <div className="border-b border-[#d6d6d6]"></div>
+          <div
+            className="w-full h-[10px] bg-center bg-repeat"
+            style={{
+              backgroundImage: "url('/dotted.svg')",
+              backgroundPosition: "center",
+              backgroundSize: "auto",
+            }}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <div className="border-b border-[#d6d6d6]"></div>
+          <StatusBar statusHistory={statusHistory} numDays={NUM_DAYS} />
+        </div>
+      </div>
     </div>
   );
 }

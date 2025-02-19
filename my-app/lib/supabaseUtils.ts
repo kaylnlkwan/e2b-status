@@ -165,6 +165,7 @@ export const fetchStatus = async () => {
       const data = await res.json();
       newStatus = data?.status || "down";
     }
+    const newDateStr = newTimestamp.toISOString().split("T")[0];
 
     const { data: lastEntry } = await supabase
       .from("status_history")

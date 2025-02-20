@@ -1,13 +1,12 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { useEffect, useState, useMemo } from "react";
 import StatusBar from "@/components/StatusBar";
 import { fetchStatusHistory, fetchStatus } from "@/lib/supabaseUtils";
 
 const NUM_DAYS = 90; // num days shown on chart
-const INTERVAL = 60000; // refresh interval 1 min
+const INTERVAL = 300000; // refresh interval 5 min
 
 export default function Home() {
   const [statusHistory, setStatusHistory] = useState<
@@ -26,7 +25,9 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  const latestStatus = statusHistory.at(-1)?.status || "not monitored";
+  const memoizedStatusHistory = useMemo(() => statusHistory, [statusHistory]);
+
+  const latestStatus = memoizedStatusHistory.at(-1)?.status || "not monitored";
 
   const STATUS_MESSAGES: Record<string, string> = {
     operational: "All Systems Operational",
@@ -39,8 +40,8 @@ export default function Home() {
     : "Fetching status...";
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-[#fafafa] p-24">
-      <div className="flex flex-col items-center justify-center max-w-[850px] w-[90%]">
+    <div className="min-h-screen flex flex-col items-center bg-[#fafafa] md:p-24 p-1 ">
+      <div className="flex flex-col items-center justify-center md:max-w-[850px] max-w-[750px] w-[90%] mt-4">
         <div className="flex flex-row justify-between w-full items-center mb-6">
           <Link href="https://e2b.dev/">
             <Image
@@ -51,14 +52,13 @@ export default function Home() {
               priority
             />
           </Link>
-          <Button>Placeholder for now</Button>
         </div>
         <div className="w-full">
-          <h2 className="text-md mono">[ {statusMessage} ]</h2>
+          <h2 className="text-md font-mono">[ {statusMessage} ]</h2>
         </div>
 
         <div className="flex flex-col w-full mt-6 border border-[#d6d6d6]">
-          <StatusBar statusHistory={statusHistory} numDays={NUM_DAYS} />
+          <StatusBar statusHistory={memoizedStatusHistory} numDays={NUM_DAYS} />
         </div>
       </div>
     </div>

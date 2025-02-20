@@ -1,21 +1,33 @@
 import { supabase } from "@/lib/supabaseClient";
 
-const groupByDay = (data: any[]) => {
-  const groupedData: Record<
-    string,
-    {
-      status: string;
-      date: string;
-      downtimePeriods: { start_time: string; end_time: string | null }[];
-    }
-  > = {};
+type StatusEntry = {
+  status: "operational" | "down";
+  start_time: string;
+  end_time: string | null; // null if downtime is ongoing
+};
 
+type GroupedStatus = {
+  status: "operational" | "down";
+  date: string;
+  downtimePeriods: { start_time: string; end_time: string | null }[];
+};
+
+// aggregate status history by day
+const groupByDay = (data: StatusEntry[]): GroupedStatus[] => {
+  const groupedData: Record<string, GroupedStatus> = {};
+  let lastStatus: "operational" | "down" = "operational";
   let currentStart: string | null = null;
-  let lastStatus: string | null = null;
+
+  let earliestDate = new Date();
+  let latestDate = new Date(0);
 
   data.forEach((entry) => {
     const date = new Date(entry.start_time);
+
     const dateStr = date.toISOString().split("T")[0];
+
+    if (date < earliestDate) earliestDate = date;
+    if (date > latestDate) latestDate = date;
 
     if (!groupedData[dateStr]) {
       groupedData[dateStr] = {
@@ -28,7 +40,6 @@ const groupByDay = (data: any[]) => {
     if (entry.status === "down") {
       let start = new Date(entry.start_time);
       let end = entry.end_time ? new Date(entry.end_time) : null;
-
       lastStatus = "down";
 
       while (
@@ -84,38 +95,27 @@ const groupByDay = (data: any[]) => {
     }
   });
 
-  let lastRecordedEntry = Object.values(groupedData)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .pop();
+  let currentDate = new Date(earliestDate.getTime());
+  currentDate.setUTCHours(0, 0, 0, 0);
 
-  if (lastRecordedEntry && lastRecordedEntry.downtimePeriods.length > 0) {
-    let lastDowntime =
-      lastRecordedEntry.downtimePeriods[
-        lastRecordedEntry.downtimePeriods.length - 1
-      ];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
 
-    if (lastDowntime.end_time === null) {
-      let lastDate = lastRecordedEntry.date;
-      let lastStatus = lastRecordedEntry.status;
-      let currentDate = new Date(lastDate);
-      let today = new Date();
-
-      while (currentDate < today) {
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-        let nextDateStr = currentDate.toISOString().split("T")[0];
-        console.log(nextDateStr);
-        groupedData[nextDateStr] = {
-          status: lastStatus,
-          date: nextDateStr,
-          downtimePeriods: [
-            {
-              start_time: nextDateStr + "T00:00:00Z",
-              end_time: null,
-            },
-          ],
-        };
-      }
+  while (currentDate <= today) {
+    let dateStr = currentDate.toISOString().split("T")[0];
+    if (!groupedData[dateStr]) {
+      groupedData[dateStr] = {
+        status: lastStatus,
+        date: dateStr,
+        downtimePeriods:
+          lastStatus === "down"
+            ? [{ start_time: `${dateStr}T00:00:00Z`, end_time: null }]
+            : [],
+      };
+    } else {
+      lastStatus = groupedData[dateStr].status;
     }
+    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
   }
 
   Object.values(groupedData).forEach((day) => {
@@ -123,11 +123,13 @@ const groupByDay = (data: any[]) => {
       day.status = "down";
     }
   });
-
+  console.log("data: ", groupedData);
   return Object.values(groupedData).reverse();
 };
 
-export const fetchStatusHistory = async (numDays: number) => {
+export const fetchStatusHistory = async (
+  numDays: number
+): Promise<GroupedStatus[]> => {
   const { data, error } = await supabase
     .from("status_history")
     .select("status, start_time, end_time")
@@ -137,35 +139,24 @@ export const fetchStatusHistory = async (numDays: number) => {
     )
     .order("start_time", { ascending: true });
 
-  if (error) {
+  if (error || !data) {
     console.error("Error fetching status history:", error);
     return [];
   }
-  const res = groupByDay(data);
-  console.log("res", res);
-  return res;
+
+  return groupByDay(data as StatusEntry[]);
 };
 
-export const fetchStatus = async () => {
+export const fetchStatus = async (): Promise<void> => {
   try {
-    let forceDowntime = false;
-    let newStatus;
     const newTimestamp = new Date();
-
-    if (forceDowntime) {
-      console.warn("Simulating manual downtime...");
-      newStatus = "down";
-    } else {
-      const res = await fetch("/api/status");
-      if (!res.ok) {
-        console.warn(`API Request Failed: ${res.status}`);
-        return;
-      }
-
-      const data = await res.json();
-      newStatus = data?.status || "down";
+    const res = await fetch("/api/status");
+    if (!res.ok) {
+      console.warn(`API Request Failed: ${res.status}`);
+      return;
     }
-    const newDateStr = newTimestamp.toISOString().split("T")[0];
+    const data = await res.json();
+    const newStatus: "operational" | "down" = data?.status || "down";
 
     const { data: lastEntry } = await supabase
       .from("status_history")
@@ -174,7 +165,6 @@ export const fetchStatus = async () => {
       .limit(1)
       .single();
 
-    // only insert if status has changed
     if (!lastEntry || lastEntry.status !== newStatus) {
       await supabase.from("status_history").insert([
         {
@@ -184,14 +174,12 @@ export const fetchStatus = async () => {
         },
       ]);
     }
+
     if (lastEntry?.status === "down" && newStatus === "operational") {
-      console.log("le", lastEntry);
       const { error: updateError } = await supabase
         .from("status_history")
         .update({ end_time: newTimestamp.toISOString() })
-        .eq("id", lastEntry.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
+        .eq("id", lastEntry.id);
 
       if (updateError) {
         console.error("Error updating downtime period:", updateError);

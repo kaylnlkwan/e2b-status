@@ -1,44 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import localFont from "next/font/local";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 
-const ibmPlexMono = localFont({
-  src: [
-    {
-      path: "/fonts/IBM_Plex_Mono/IBMPlexMono-Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "/fonts/IBM_Plex_Mono/IBMPlexMono-Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-    {
-      path: "/fonts/IBM_Plex_Mono/IBMPlexMono-Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
-  ],
-  variable: "--font-ibmplexmono",
-  display: "swap",
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-mono",
 });
 
-const ibmPlexSans = localFont({
-  src: [
-    {
-      path: "/fonts/IBM_Plex_Sans/IBMPlexSans-VariableFont_wdth,wght.ttf",
-      weight: "100 700",
-      style: "normal",
-    },
-    {
-      path: "/fonts/IBM_Plex_Sans/IBMPlexSans-Italic-VariableFont_wdth,wght.ttf",
-      weight: "100 700",
-      style: "italic",
-    },
-  ],
-  variable: "--font-ibmplexsans",
-  display: "swap",
+const ibmPlexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
@@ -52,12 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${ibmPlexMono.variable} ${ibmPlexSans.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html
+      lang="en"
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
+    >
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
